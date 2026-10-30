@@ -34,5 +34,36 @@ Dependencies only go one way: routes → services → data → db.
 
 ## Git workflow
 
-- Never push to `main` directly. Work on your own branch and open a pull request.
-- Keep your branch up to date: `git switch main && git pull && git switch <branch> && git merge main`
+Everyone works on their own branch. `main` is the shared version and must always build and pass the tests.
+
+**First time:**
+```bash
+git switch main && git pull
+git switch -c <your-name>
+git push -u origin <your-name>
+```
+
+**While working on your branch:**
+- Commit and push as often as you like: `git add .`, `git commit -m "..."`, `git push`
+- Bring in the others' work regularly:
+  ```bash
+  git switch main && git pull
+  git switch <your-name> && git merge main
+  ```
+
+**When something is finished, merge it into `main`:**
+```bash
+git switch <your-name> && git merge main   # get the latest main first, fix any conflicts
+npm test && npm run build                  # both must pass
+git switch main && git pull
+git merge <your-name>
+git push
+git switch <your-name>                     # back to your branch
+```
+
+**Rules**
+1. Never merge into `main` if `npm test` or `npm run build` fails.
+2. Merge small and often (e.g. one route or data module at a time).
+3. Say in the group chat when you change `src/app.ts`, since everyone mounts their routers there.
+4. Never force-push (`--force`) to `main`.
+5. Never commit `.env`. Copy `.env.example` instead and fill in your own values.
