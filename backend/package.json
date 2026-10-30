@@ -1,0 +1,28 @@
+{
+  "name": "cit-movie-backend",
+  "version": "1.0.0",
+  "description": "CIT/P portfolio project - subproject 2 backend",
+  "scripts": {
+    "build": "tsc",
+    "start": "node --env-file=.env dist/index.js",
+    "dev": "tsc && node --env-file=.env dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.3.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  },
+  "private": true,
+  "type": "module"
+}
