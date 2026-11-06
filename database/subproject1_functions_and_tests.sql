@@ -538,8 +538,9 @@ SELECT * FROM movie_similarity('tt26693752');
 
 -- Most frequent words (top 10) in the titles a person is involved in, from the word index wi
 DROP FUNCTION IF EXISTS person_words(TEXT);
+DROP FUNCTION IF EXISTS person_words(TEXT, INT, INT);
 
-CREATE OR REPLACE FUNCTION person_words(input_name TEXT)
+CREATE OR REPLACE FUNCTION person_words(input_name TEXT, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
 RETURNS TABLE (word TEXT, frequency BIGINT)
 LANGUAGE plpgsql
 AS $$
@@ -553,8 +554,9 @@ BEGIN
     JOIN wi w ON w.tconst = c.title_id
     WHERE p.primary_name = input_name
     GROUP BY w.word
-    ORDER BY frequency DESC
-    LIMIT 10;
+    -- Oder by frequency descending, then by word ascending for when two words have the same frequency
+    ORDER BY frequency DESC, w.word ASC
+    LIMIT limit_input OFFSET offset_input;
 END;
 $$;
 
