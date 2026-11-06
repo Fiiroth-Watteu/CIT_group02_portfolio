@@ -536,7 +536,7 @@ SELECT * FROM movie_similarity('tt26693752');
 -- 1-D.10 Frequent person words
 -- =====================================================================
 
--- Most frequent words (top 10) in the titles a person is involved in, from the word index wi
+-- Most frequent words paged with limit (default 10) and offset (default 0) in the titles a person is involved in, from the word index wi
 DROP FUNCTION IF EXISTS person_words(TEXT);
 DROP FUNCTION IF EXISTS person_words(TEXT, INT, INT);
 
@@ -560,7 +560,9 @@ BEGIN
 END;
 $$;
 
-SELECT * FROM person_words('Tom Hanks');
+   SELECT * FROM person_words('Tom Hanks');         -- default: first 10
+   SELECT * FROM person_words('Tom Hanks', 5);      -- page size 5
+   SELECT * FROM person_words('Tom Hanks', 5, 5);   -- second page of 5
 
 
 -- =====================================================================
@@ -653,9 +655,9 @@ SELECT * FROM best_match('apple', 'mads', 'mikkelsen') ORDER BY rank DESC LIMIT 
 -- titles. Result: a broad set of titles, so the word counts are dominated by
 -- generic words (e.g. "self", "episode"), not necessarily specific to the search.
 
-DROP FUNCTION IF EXISTS word_to_word(text[]);
+DROP FUNCTION IF EXISTS word_to_word_any(text[]);
 
-CREATE OR REPLACE FUNCTION word_to_word(VARIADIC keywords text[])
+CREATE OR REPLACE FUNCTION word_to_word_any(VARIADIC keywords text[])
 RETURNS TABLE (word text, frequency BIGINT)
 AS $$
 DECLARE
@@ -680,16 +682,16 @@ $$
 LANGUAGE plpgsql;
 
 -- Test: generic words dominate (top 10 shown)
-SELECT * FROM word_to_word('apple', 'mads', 'mikkelsen') ORDER BY frequency DESC LIMIT 10;
+SELECT * FROM word_to_word_any('apple', 'mads', 'mikkelsen') ORDER BY frequency DESC LIMIT 10;
 
 
 -- EXACT-MATCH variant: step 1 reuses exact_match's title-finder (INTERSECT -
 -- titles matching ALL keywords), step 2 counts words across those (far fewer)
 -- titles. Result: the word counts stay specific to the actual search.
 
-DROP FUNCTION IF EXISTS word_to_word1(text[]);
+DROP FUNCTION IF EXISTS word_to_word_all(text[]);
 
-CREATE OR REPLACE FUNCTION word_to_word1(VARIADIC keywords text[])
+CREATE OR REPLACE FUNCTION word_to_word_all(VARIADIC keywords text[])
 RETURNS TABLE (word text, frequency BIGINT)
 AS $$
 DECLARE
@@ -715,7 +717,7 @@ $$
 LANGUAGE plpgsql;
 
 -- Test: words specific to Adam's Apples (top 10 shown)
-SELECT * FROM word_to_word1('apple', 'mads', 'mikkelsen') ORDER BY frequency DESC LIMIT 10;
+SELECT * FROM word_to_word_all('apple', 'mads', 'mikkelsen') ORDER BY frequency DESC LIMIT 10;
 
 
 -- =====================================================================
