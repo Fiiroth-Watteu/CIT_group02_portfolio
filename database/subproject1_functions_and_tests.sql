@@ -655,9 +655,9 @@ SELECT * FROM best_match('apple', 'mads', 'mikkelsen') ORDER BY rank DESC LIMIT 
 -- titles. Result: a broad set of titles, so the word counts are dominated by
 -- generic words (e.g. "self", "episode"), not necessarily specific to the search.
 
-DROP FUNCTION IF EXISTS word_to_word_any(text[]);
+DROP FUNCTION IF EXISTS word_to_words_any(text[]);
 
-CREATE OR REPLACE FUNCTION word_to_word_any(VARIADIC keywords text[])
+CREATE OR REPLACE FUNCTION word_to_words_any(VARIADIC keywords text[])
 RETURNS TABLE (word text, frequency BIGINT)
 AS $$
 DECLARE
@@ -682,16 +682,16 @@ $$
 LANGUAGE plpgsql;
 
 -- Test: generic words dominate (top 10 shown)
-SELECT * FROM word_to_word_any('apple', 'mads', 'mikkelsen') ORDER BY frequency DESC LIMIT 10;
+SELECT * FROM word_to_words_any('apple', 'mads', 'mikkelsen') ORDER BY frequency DESC LIMIT 10;
 
 
 -- EXACT-MATCH variant: step 1 reuses exact_match's title-finder (INTERSECT -
 -- titles matching ALL keywords), step 2 counts words across those (far fewer)
 -- titles. Result: the word counts stay specific to the actual search.
 
-DROP FUNCTION IF EXISTS word_to_word_all(text[]);
+DROP FUNCTION IF EXISTS word_to_words_all(text[]);
 
-CREATE OR REPLACE FUNCTION word_to_word_all(VARIADIC keywords text[])
+CREATE OR REPLACE FUNCTION word_to_words_all(VARIADIC keywords text[])
 RETURNS TABLE (word text, frequency BIGINT)
 AS $$
 DECLARE
@@ -717,7 +717,7 @@ $$
 LANGUAGE plpgsql;
 
 -- Test: words specific to Adam's Apples (top 10 shown)
-SELECT * FROM word_to_word_all('apple', 'mads', 'mikkelsen') ORDER BY frequency DESC LIMIT 10;
+SELECT * FROM word_to_words_all('apple', 'mads', 'mikkelsen') ORDER BY frequency DESC LIMIT 10;
 
 
 -- =====================================================================
