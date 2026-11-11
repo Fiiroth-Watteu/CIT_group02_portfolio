@@ -16,9 +16,7 @@
 -- (2>&1 so RAISE NOTICE output, i.e. the dynamically built queries, ends up in the file too)
 
 
--- =====================================================================
 -- 1-D.1 Basic framework functionality
--- =====================================================================
 
 -- Create a user if the username isn't taken and the email isn't tied to a user.
 -- Note: the password is stored as plain text, not as a hash.
@@ -219,9 +217,7 @@ SELECT Delete_person_bookmark (test_user_id(), 'nm0000001 ');
 SELECT * FROM Get_bookmarks (test_user_id());
 
 
--- =====================================================================
 -- 1-D.2 Simple search
--- =====================================================================
 
 -- Find titles where the search string is a substring of the title.
 -- The search is stored in the search history as a side effect.
@@ -246,9 +242,7 @@ SELECT * FROM String_search('death', test_user_id()) LIMIT 5;
 SELECT * FROM Get_search_history (test_user_id());
 
 
--- =====================================================================
 -- 1-D.3 Title rating
--- =====================================================================
 
 -- Rate a title. A second rating by the same user updates the earlier one.
 CREATE OR REPLACE FUNCTION Give_rating (user_input INT, title_input char(10), score NUMERIC)
@@ -288,9 +282,7 @@ SELECT * FROM Get_rating_history (test_user_id());
 SELECT * FROM ratings WHERE title_id = 'tt0052520';
 
 
--- =====================================================================
 -- 1-D.4 Structured string search
--- =====================================================================
 
 -- All four parameters are used as case-insensitive substrings and the results
 -- are intersected. The search is stored in the search history as a side effect.
@@ -325,9 +317,7 @@ SELECT * FROM Structured_string_search('casino', 'bond', 'james bond', 'Mads mik
 SELECT * FROM Get_search_history (test_user_id());
 
 
--- =====================================================================
 -- 1-D.5 Finding names and 1-D.6 Finding co-players
--- =====================================================================
 
 -- View collecting the most important columns from casted_as and person
 CREATE OR REPLACE VIEW person_title_view AS
@@ -406,9 +396,7 @@ SELECT * FROM find_person_by_name('Tom') LIMIT 10;
 SELECT * FROM find_co_players('Tom Hanks');
 
 
--- =====================================================================
 -- 1-D.7 Name rating
--- =====================================================================
 
 -- Store the name rating on the person table
 ALTER TABLE person
@@ -468,9 +456,7 @@ SELECT count(name_rating) AS persons_with_rating_after FROM person;
 SELECT * FROM get_person_rating('Tom Hanks');
 
 
--- =====================================================================
 -- 1-D.8 Popular actors
--- =====================================================================
 
 -- Actors of a title ordered by decreasing name rating (uses the ratings from 1-D.7)
 DROP FUNCTION IF EXISTS popular_actors(TEXT);
@@ -501,9 +487,7 @@ $$;
 SELECT * FROM popular_actors('tt26693752');
 
 
--- =====================================================================
 -- 1-D.9 Similar movies
--- =====================================================================
 
 -- Similarity = number of genres two titles share (top 20).
 -- Genres are in the separate genre table, one row per (title, genre).
@@ -536,9 +520,7 @@ $$;
 SELECT * FROM movie_similarity('tt26693752');
 
 
--- =====================================================================
 -- 1-D.10 Frequent person words
--- =====================================================================
 
 -- Most frequent words paged with limit (default 10) and offset (default 0) in the titles a person is involved in, from the word index wi
 DROP FUNCTION IF EXISTS person_words(TEXT);
@@ -586,6 +568,12 @@ DECLARE
     q text;  -- holds the dynamically built query
     i int;   -- loop counter over keywords
 BEGIN
+
+      -- lowercase all keywords, because every word in wi is stored in lowercase
+    FOR i IN 1..array_length(keywords, 1) LOOP
+        keywords[i] := lower(keywords[i]);
+    END LOOP;
+
     -- start the chain with the first keyword (no INTERSECT yet)
     q := 'SELECT tconst FROM wi WHERE word = ''' || keywords[1] || '''';
 
@@ -608,9 +596,7 @@ LANGUAGE plpgsql;
 SELECT * FROM exact_match('apple', 'mads', 'mikkelsen');
 
 
--- =====================================================================
 -- 1-D.12 Best match
--- =====================================================================
 -- Titles ranked by HOW MANY of the given keywords they match (not just
 -- all-or-nothing like exact_match). Same VARIADIC + dynamic EXECUTE structure
 -- as exact_match, but UNION ALL instead of INTERSECT, plus a relevance score
@@ -626,6 +612,12 @@ DECLARE
              -- NOT the aggregation - that happens later, in the outer query)
     i int;
 BEGIN
+
+      -- lowercase all keywords, because every word in wi is stored in lowercase
+    FOR i IN 1..array_length(keywords, 1) LOOP
+        keywords[i] := lower(keywords[i]);
+    END LOOP;
+
     -- each keyword gets relevance = 1. A title matching 3/3 keywords ends up with
     -- 3 rows here, which sum() turns into rank = 3 in the outer query.
     q := 'SELECT tconst, 1 relevance FROM wi WHERE word = ''' || keywords[1] || '''';
@@ -651,9 +643,7 @@ LANGUAGE plpgsql;
 SELECT * FROM best_match('apple', 'mads', 'mikkelsen') ORDER BY rank DESC LIMIT 10;
 
 
--- =====================================================================
 -- 1-D.13 Word-to-words
--- =====================================================================
 -- ANY-MATCH variant: step 1 reuses best_match's title-finder (UNION ALL -
 -- titles matching AT LEAST ONE keyword), step 2 counts words across ALL those
 -- titles. Result: a broad set of titles, so the word counts are dominated by
@@ -669,6 +659,12 @@ DECLARE
              -- relevance isn't used here, q is only a source of matching tconst values
     i int;
 BEGIN
+
+      -- lowercase all keywords, because every word in wi is stored in lowercase
+    FOR i IN 1..array_length(keywords, 1) LOOP
+        keywords[i] := lower(keywords[i]);
+    END LOOP;
+
     q := 'SELECT tconst, 1 relevance FROM wi WHERE word = ''' || keywords[1] || '''';
 
     FOR i IN 2..array_length(keywords, 1) LOOP
@@ -702,6 +698,12 @@ DECLARE
     q text;
     i int;
 BEGIN
+
+        -- lowercase all keywords, because every word in wi is stored in lowercase
+    FOR i IN 1..array_length(keywords, 1) LOOP
+        keywords[i] := lower(keywords[i]);
+    END LOOP;
+
     -- start the chain with the first keyword (no INTERSECT yet)
     q := 'SELECT tconst FROM wi WHERE word = ''' || keywords[1] || '''';
 
@@ -724,9 +726,7 @@ LANGUAGE plpgsql;
 SELECT * FROM word_to_words_all('apple', 'mads', 'mikkelsen') ORDER BY frequency DESC LIMIT 10;
 
 
--- =====================================================================
 -- 1-D.14 Weighted querying: wi_weighted + weighted_match
--- =====================================================================
 -- Rerunnable: drops everything first.
 
 DROP FUNCTION IF EXISTS weighted_match(text[]);
@@ -786,6 +786,12 @@ DECLARE
     q text;
     i int;
 BEGIN
+
+      -- lowercase all keywords, because every word in wi is stored in lowercase
+    FOR i IN 1..array_length(keywords, 1) LOOP
+        keywords[i] := lower(keywords[i]);
+    END LOOP;
+
     q := 'SELECT tconst, weight FROM wi_weighted WHERE word = ''' || keywords[1] || '''';
 
     FOR i IN 2..array_length(keywords, 1) LOOP
