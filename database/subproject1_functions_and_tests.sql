@@ -146,7 +146,7 @@ $$;
 
 -- Retrieve title and person bookmarks for a user.
 -- Title IDs and person IDs can be told apart by the first two characters (tt / nm).
-CREATE OR REPLACE FUNCTION Get_bookmarks (user_input INT)
+CREATE OR REPLACE FUNCTION Get_bookmarks (user_input INT, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
 RETURNS TABLE (
   user_id int,
   bookmarked_id CHAR(10)
@@ -156,12 +156,13 @@ LANGUAGE plpgsql AS $$
     RETURN QUERY
     (SELECT * FROM title_bookmark WHERE user_input = title_bookmark.user_id)
     UNION
-    (SELECT * FROM person_bookmark WHERE user_input = person_bookmark.user_id);
+    (SELECT * FROM person_bookmark WHERE user_input = person_bookmark.user_id)
+    LIMIT limit_input OFFSET offset_input;
   END;
 $$;
 
 -- Retrieve search history for a user
-CREATE OR REPLACE FUNCTION Get_search_history (user_input INT)
+CREATE OR REPLACE FUNCTION Get_search_history (user_input INT, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
 RETURNS TABLE (
   user_id INT,
   search_input TEXT,
@@ -170,12 +171,14 @@ RETURNS TABLE (
 LANGUAGE plpgsql AS $$
   BEGIN
     RETURN QUERY
-    SELECT search_history.user_id, search_history.search_input, search_history.searched_at FROM search_history WHERE user_input = search_history.user_id;
+    SELECT search_history.user_id, search_history.search_input, search_history.searched_at
+    FROM search_history WHERE user_input = search_history.user_id
+    LIMIT limit_input OFFSET offset_input;
   END;
 $$;
 
 -- Retrieve rating history for a user
-CREATE OR REPLACE FUNCTION Get_rating_history (user_input INT)
+CREATE OR REPLACE FUNCTION Get_rating_history (user_input INT, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
 RETURNS TABLE (
   user_id INT,
   title_id CHAR(10),
@@ -185,7 +188,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql AS $$
   BEGIN
     RETURN QUERY
-    SELECT rating_history.user_id, rating_history.title_id, rating_history.rating_score, rating_history.rated_at FROM rating_history WHERE user_input = rating_history.user_id;
+    SELECT rating_history.user_id, rating_history.title_id, rating_history.rating_score, rating_history.rated_at FROM rating_history WHERE user_input = rating_history.user_id LIMIT limit_input OFFSET offset_input;
   END;
 $$;
 
@@ -222,7 +225,7 @@ SELECT * FROM Get_bookmarks (test_user_id());
 
 -- Find titles where the search string is a substring of the title.
 -- The search is stored in the search history as a side effect.
-CREATE OR REPLACE FUNCTION String_search(S_input VARCHAR(255), user_searching int)
+CREATE OR REPLACE FUNCTION String_search(S_input VARCHAR(255), user_searching int, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
 RETURNS TABLE (
   Title_ID CHAR(10),
   primary_title TEXT
@@ -230,8 +233,8 @@ RETURNS TABLE (
 LANGUAGE plpgsql AS $$
   BEGIN
     RETURN QUERY
-    SELECT title.title_id, title.primary_title FROM title WHERE title.primary_title ILIKE '%' || S_input || '%';
-
+    SELECT title.title_id, title.primary_title FROM "public".title WHERE title.primary_title ILIKE '%' || S_input || '%' LIMIT limit_input OFFSET offset_input;
+    
     INSERT INTO search_history (user_id, search_input)
     VALUES (user_searching, 'simple search: ' || S_input);
   END;
@@ -292,7 +295,7 @@ SELECT * FROM ratings WHERE title_id = 'tt0052520';
 -- All four parameters are used as case-insensitive substrings and the results
 -- are intersected. The search is stored in the search history as a side effect.
 -- Note: an empty parameter becomes '%%', which only matches non-NULL values.
-CREATE OR REPLACE FUNCTION Structured_string_search(title_input1 VARCHAR(255), plot_input2 VARCHAR(255), characters_input3 VARCHAR(255), person_input4 VARCHAR(255), user_searching int)
+CREATE OR REPLACE FUNCTION Structured_string_search(title_input1 VARCHAR(255), plot_input2 VARCHAR(255), characters_input3 VARCHAR(255), person_input4 VARCHAR(255), user_searching int, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
 RETURNS TABLE (
   Title_ID CHAR(10),
   primary_title TEXT
@@ -301,14 +304,15 @@ LANGUAGE plpgsql AS $$
   DECLARE structured_search_notation TEXT;
   BEGIN
     RETURN QUERY
-    (SELECT title.title_id, title.primary_title FROM title WHERE title.primary_title ILIKE '%' || title_input1 || '%')
+    (SELECT title.title_id, title.primary_title FROM "public".title WHERE title.primary_title ILIKE '%' || title_input1 || '%')
     INTERSECT
-    (SELECT title.title_id, title.primary_title FROM title WHERE title.plot ILIKE '%' || plot_input2 || '%')
+    (SELECT title.title_id, title.primary_title FROM "public".title WHERE title.plot ILIKE '%' || plot_input2 || '%')
     INTERSECT
-    (SELECT title.title_id, title.primary_title FROM casted_as JOIN title USING (title_id) WHERE casted_as."characters" ILIKE '%' || characters_input3 || '%')
+    (SELECT title.title_id, title.primary_title FROM "public".casted_as JOIN "public".title USING (title_id) WHERE casted_as."characters" ILIKE '%' || characters_input3 || '%')
     INTERSECT
-    (SELECT title.title_id, title.primary_title FROM casted_as JOIN title USING (title_id) JOIN person USING (person_id) WHERE person.primary_name ILIKE '%' || person_input4 || '%');
-
+    (SELECT title.title_id, title.primary_title FROM "public".casted_as JOIN "public".title USING (title_id) JOIN "public".person USING (person_id) WHERE person.primary_name ILIKE '%' || person_input4 || '%')
+    LIMIT limit_input OFFSET offset_input;
+    
     structured_search_notation := CONCAT('structured search title:', title_input1, ' plot:', plot_input2, ' characters:', characters_input3, ' person:', person_input4);
     INSERT INTO search_history (user_id, search_input)
     VALUES (user_searching, structured_search_notation);
