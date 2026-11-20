@@ -92,6 +92,142 @@ GET    /api/users/{id}/searches                                           200 | 
 DELETE /api/users/{id}/searches                                           204 | 401 | 403
 ```
 
+## Representations (2-B.2)
+
+Field names are snake_case. A field with no value is `null`, never left out.
+Years and numbers are JSON numbers. Timestamps are ISO 8601 strings
+(e.g. `"2026-11-20T13:54:00Z"`).
+
+### Lists (2-A.3)
+Every list is returned as a page object. Example: the second page of a search,
+requested with `limit=20&offset=20`:
+```json
+{
+  "items": [ … ],
+  "prev": "/api/titles?q=twilight&limit=20&offset=0",
+  "next": "/api/titles?q=twilight&limit=20&offset=40"
+}
+```
+- `prev` is `null` on the first page. `next` is `null` on the last page.
+- `prev` and `next` keep all other query parameters of the request (e.g. `q`, `mode`).
+
+### References to resources (2-A.2)
+Every resource in a response is identified by a relative URI in a `url` field, never by a
+bare id. Related resources appear in their short form:
+```json
+{ "url": "/api/titles/tt0052520", "primary_title": "The Twilight Zone", "start_year": 1959 }
+```
+
+### Errors
+Every error response has the same shape:
+```json
+{ "error": "No such title" }
+```
+The message never contains a stack trace, SQL text or database identifiers (2-A.4).
+
+### Title
+… (continue with the Title, Person, List items, User, Token, Bookmarks and Request bodies
+sections from the other block)
+
+## Resource representations (2-B.2)
+
+Field names are snake_case. A field with no value is `null`, never left out.
+Years and numbers are JSON numbers. Timestamps are ISO 8601 strings
+(e.g. `"2026-11-20T13:54:00Z"`).
+
+### Title
+Short form, used in every list and wherever a title is referred to:
+```json
+{ "url": "/api/titles/tt0052520", "primary_title": "The Twilight Zone", "start_year": 1959 }
+```
+Full form, `GET /api/titles/{tconst}`:
+```json
+{
+  "url": "/api/titles/tt0052520",
+  "type": "tvSeries",
+  "primary_title": "The Twilight Zone",
+  "original_title": "The Twilight Zone",
+  "is_adult": false,
+  "start_year": 1959,
+  "end_year": 1964,
+  "runtime": 50,
+  "plot": "…",
+  "poster": "https://m.media-amazon.com/images/…",
+  "genres": [ "Drama", "Fantasy", "Horror" ],
+  "avg_rating": 9.0,
+  "votes": 109820,
+  "similar": "/api/titles/tt0052520/similar",
+  "actors": "/api/titles/tt0052520/actors"
+}
+```
+
+### Person
+Short form:
+```json
+{ "url": "/api/persons/nm0000158", "primary_name": "Tom Hanks" }
+```
+Full form, `GET /api/persons/{nconst}`:
+```json
+{
+  "url": "/api/persons/nm0000158",
+  "primary_name": "Tom Hanks",
+  "birth_year": 1956,
+  "death_year": null,
+  "name_rating": 8.02,
+  "co_players": "/api/persons/nm0000158/co-players",
+  "words": "/api/persons/nm0000158/words"
+}
+```
+
+### List items (inside `items` of a page)
+| Route | Item |
+|---|---|
+| `GET /api/titles?q=…` (weighted, best) | short title + `"rank"` (number) |
+| `GET /api/titles?q=…` (exact, simple, structured) | short title |
+| `GET /api/titles/{tconst}/similar` | short title + `"similarity_score"` (number) |
+| `GET /api/titles/{tconst}/actors` | short person + `"name_rating"` (number or `null`) |
+| `GET /api/persons?name=…` | short person + `"birth_year"`, `"death_year"`, `"name_rating"` |
+| `GET /api/persons/{nconst}/co-players` | short person + `"frequency"` (number) |
+| `GET /api/persons/{nconst}/words`, `GET /api/words` | `{ "word": "…", "frequency": … }` |
+
+### User
+`GET /api/users/{id}`, and the response to `POST /api/users` and `PATCH /api/users/{id}`:
+```json
+{
+  "url": "/api/users/5",
+  "username": "jonas",
+  "email": "jonas@example.com",
+  "title_bookmarks": "/api/users/5/title-bookmarks",
+  "person_bookmarks": "/api/users/5/person-bookmarks",
+  "ratings": "/api/users/5/ratings",
+  "searches": "/api/users/5/searches"
+}
+```
+
+### Token
+Response to `POST /api/tokens`:
+```json
+{ "token": "eyJhbGciOi…", "user": "/api/users/5" }
+```
+
+### Bookmarks, ratings, searches (items in the user's lists)
+```json
+{ "url": "/api/users/5/title-bookmarks/tt0052520", "title": { short title } }
+{ "url": "/api/users/5/person-bookmarks/nm0000158", "person": { short person } }
+{ "url": "/api/users/5/ratings/tt0052520", "title": { short title }, "rating_score": 9, "rated_at": "2026-11-20T13:54:00Z" }
+{ "search_input": "simple search: twilight", "searched_at": "2026-11-20T13:54:00Z" }
+```
+
+### Request bodies
+```
+POST   /api/users                          { "username", "email", "password" }
+POST   /api/tokens                         { "username", "password" }
+PATCH  /api/users/{id}                     any of { "email", "password" }
+POST   /api/users/{id}/title-bookmarks     { "title": "/api/titles/tt0052520" }
+POST   /api/users/{id}/person-bookmarks    { "person": "/api/persons/nm0000158" }
+PUT    /api/users/{id}/ratings/{tconst}    { "rating_score": 9 }
+```
+
 ## Decisions and reasons
 
 ### Routes
@@ -129,6 +265,17 @@ DELETE /api/users/{id}/searches                                           204 | 
   1–10. 404 if the title in the path does not exist.
 - **DELETE of something that does not exist gives 404**, so the client learns it made a
   mistake. Deleting the whole search history gives 204 even if it was already empty.
+
+### Representations
+- **Page object with `items`, `prev`, `next`:** one shape for every list, so the client
+  handles paging the same way everywhere.
+- **`null` when there is no previous or next page:** the fields always exist, so the client
+  only has to check for `null`.
+- **Relative URIs:** they do not depend on the host the backend runs on.
+- **URI only, no separate id field:** 2-A.2 requires resources to be identified by URI. The
+  id is part of the URI.
+- **Error format `{ "error": "…" }`:** one simple shape for every error (2-B.2), as used in
+  the skeleton's error handler.
 
 ## Open
 - Simple and structured search fail for guests: `search_history.user_id` is NOT NULL.
