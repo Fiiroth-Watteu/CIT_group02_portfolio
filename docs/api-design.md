@@ -5,77 +5,135 @@
 - Nouns, not verbs; the HTTP method is the verb.
 - Plural for collections, lowercase, hyphens for two-word names.
 - At most two levels of nesting.
-- Every list is paged with `?limit=&offset=` and has `prev`/`next` links (2-A.3).
+
+## Paging (2-A.3)
+- Every list is paged with `?limit=&offset=` and has `prev`/`next` links.
+- `limit` defaults to 20 (minimum 1, maximum 100). `offset` defaults to 0.
+- Invalid values are clamped to this range (7-1, slide 7), so paging never gives 400.
+
+## Status code rules
+
+### All routes
+- **500** applies to every route and is handled centrally (2-D.5).
+- **400** when a parameter or the request body is missing or invalid (2-D.2).
+- **An empty list is never 404.** It is 200 + `[]` (6-2, slide 11).
+
+### Read-only routes (IMDb data)
+- **One resource by id** (e.g. `/titles/{tconst}`): 404 if the id does not exist.
+- **List under an id** (e.g. `/titles/{tconst}/similar`): 404 only if the parent does not exist.
+- **Search with parameters** (e.g. `/titles?q=…`): no id in the path, so never 404.
+
+### Framework routes (user data)
+- **Guarded:** every route under `/api/users/{id}`, including `/users/{id}` itself, requires a
+  valid token. **401** if the token is missing, invalid or expired. **403** if the id in the URI
+  is not the id in the token (8-2).
+- **Open:** `POST /api/users` and `POST /api/tokens` require no token (8-2: login is open).
+- **Created:** a `POST` that creates a resource gives **201** + a `Location` header (6-2, slide 11).
+- **Deleted:** a successful `DELETE` gives **204** with no body (6-2, slide 11).
+- **Conflict:** **409** when the request clashes with an existing resource (e.g. a taken username).
 
 ## Routes
 
 ### Titles (read-only IMDb data)
 ```
-GET    /api/titles?q=…&mode=weighted|best|exact|simple    search; weighted is the default
-GET    /api/titles?title=…&plot=…&characters=…&person=…&mode=structured
-GET    /api/titles/{tconst}                               details
-GET    /api/titles/{tconst}/similar                       similar movies (1-D.9)
-GET    /api/titles/{tconst}/actors                        popular actors (1-D.8)
+GET    /api/titles?q=…&mode=weighted|best|exact|simple                    200 | 400         search; weighted is the default
+GET    /api/titles?title=…&plot=…&characters=…&person=…&mode=structured   200 | 400         structured search
+GET    /api/titles/{tconst}                                               200 | 404         details
+GET    /api/titles/{tconst}/similar                                       200 | 404         similar movies (1-D.9)
+GET    /api/titles/{tconst}/actors                                        200 | 404         popular actors (1-D.8)
 ```
-`q` may be repeated for several keywords: `?q=adams&q=mads mikkelsen`.
+- Search: 400 if `q` is missing or `mode` is unknown. `q` may be repeated for several
+  keywords: `?q=adams&q=mads mikkelsen`.
+- Structured search: 400 if all four fields (`title`, `plot`, `characters`, `person`) are missing.
 
 ### Persons (read-only IMDb data)
 ```
-GET    /api/persons?name=…                                find person (1-D.5)
-GET    /api/persons/{nconst}                              details + name rating (1-D.7)
-GET    /api/persons/{nconst}/co-players                   co-players (1-D.6)
-GET    /api/persons/{nconst}/words                        person words (1-D.10)
+GET    /api/persons?name=…                                                200 | 400         find person (1-D.5)
+GET    /api/persons/{nconst}                                              200 | 404         details + name rating (1-D.7)
+GET    /api/persons/{nconst}/co-players                                   200 | 404         co-players (1-D.6)
+GET    /api/persons/{nconst}/words                                        200 | 404         person words (1-D.10)
 ```
+- Find person: 400 if `name` is missing.
+- Person words: a person whose titles have no indexed words gives 200 + `[]`.
 
 ### Words (read-only IMDb data)
 ```
-GET    /api/words?q=…&match=all|any                       word-to-words (1-D.13)
+GET    /api/words?q=…&match=all|any                                       200 | 400         word-to-words (1-D.13)
 ```
+- 400 if `q` is missing or `match` is unknown.
 
 ### Users and authentication (framework data)
 ```
-POST   /api/users                                         create user
-POST   /api/tokens                                        log in (open route, 8-2)
-GET    /api/users/{id}                                    see user
-PATCH  /api/users/{id}                                    change part of a user
-DELETE /api/users/{id}                                    delete user
+POST   /api/users                                                         201 | 400 | 409                     create user
+POST   /api/tokens                                                        200 | 400 | 401                     log in (open)
+GET    /api/users/{id}                                                    200 | 401 | 403 | 404               see user
+PATCH  /api/users/{id}                                                    200 | 400 | 401 | 403 | 404 | 409   change part of a user
+DELETE /api/users/{id}                                                    204 | 401 | 403 | 404               delete user
+```
 
-GET    /api/users/{id}/title-bookmarks                    title bookmarks (1-D.1)
-POST   /api/users/{id}/title-bookmarks
-DELETE /api/users/{id}/title-bookmarks/{tconst}
+### Bookmarks (framework data)
+```
+GET    /api/users/{id}/title-bookmarks                                    200 | 401 | 403                     title bookmarks (1-D.1)
+POST   /api/users/{id}/title-bookmarks                                    201 | 400 | 401 | 403 | 409
+DELETE /api/users/{id}/title-bookmarks/{tconst}                           204 | 401 | 403 | 404
 
-GET    /api/users/{id}/person-bookmarks                   person bookmarks (1-D.1)
-POST   /api/users/{id}/person-bookmarks
-DELETE /api/users/{id}/person-bookmarks/{nconst}
+GET    /api/users/{id}/person-bookmarks                                   200 | 401 | 403                     person bookmarks (1-D.1)
+POST   /api/users/{id}/person-bookmarks                                   201 | 400 | 401 | 403 | 409
+DELETE /api/users/{id}/person-bookmarks/{nconst}                          204 | 401 | 403 | 404
+```
 
-GET    /api/users/{id}/ratings                            rating history
-PUT    /api/users/{id}/ratings/{tconst}                   give or change rating (1-D.3)
-DELETE /api/users/{id}/ratings/{tconst}
+### Ratings and search history (framework data)
+```
+GET    /api/users/{id}/ratings                                            200 | 401 | 403                     rating history
+PUT    /api/users/{id}/ratings/{tconst}                                   200 | 400 | 401 | 403 | 404         give or change rating (1-D.3)
+DELETE /api/users/{id}/ratings/{tconst}                                   204 | 401 | 403 | 404
 
-GET    /api/users/{id}/searches                           search history
-DELETE /api/users/{id}/searches
+GET    /api/users/{id}/searches                                           200 | 401 | 403                     search history
+DELETE /api/users/{id}/searches                                           204 | 401 | 403
 ```
 
 ## Decisions and reasons
+
+### Routes
 - **`co-players`**, not `coplayers`: lowercase with hyphens for two-word names (6-2, slide 5).
-- **`POST /api/tokens`** for login: logging in creates a token, and 6-2 prefers nouns
-  over verbs. (8-2 uses `/auth`, which would also be acceptable.)
-- **Two bookmark collections** (`title-bookmarks`, `person-bookmarks`): clearer than one
-  mixed collection, matches the two tables, and each DELETE takes one kind of id.
+- **`POST /api/tokens`** for login: logging in creates a token, and 6-2 prefers nouns over
+  verbs. (8-2 uses `/auth`, which would also be acceptable.)
+- **Two bookmark collections** (`title-bookmarks`, `person-bookmarks`): clearer than one mixed
+  collection, matches the two tables, and each DELETE takes one kind of id.
 - **`PATCH`** for changing a user: a user changes part of their profile (e.g. email or
   password), not the whole resource (6-2, slide 6).
 - **`/users/{id}/…`** rather than `/users/me/…`: the URI identifies one specific resource
-  (2-A.2). The id in the URI must match the id in the token, otherwise 403 (8-2). The
-  check does not need the database, so it can be middleware (2-C.7).
-- **All title searches are modes of `GET /api/titles`**: they all return titles (6-1:
-  place by what is returned). Simple and structured search also store search history for
-  logged-in users, which makes them not strictly safe (4-4, slide 5). Accepted, because
-  the history entry is a record of the read, not something the client asks to create,
-  and GET keeps search results linkable (3-E.4).
+  (2-A.2). The check that the id matches the token does not need the database, so it can be
+  middleware (2-C.7).
+- **All title searches are modes of `GET /api/titles`**: they all return titles (6-1: place by
+  what is returned). Simple and structured search also store search history for logged-in
+  users, which makes them not strictly safe (4-4, slide 5). Accepted, because the history entry
+  is a record of the read, not something the client asks to create, and GET keeps search
+  results linkable (3-E.4).
+
+### Status codes
+- **409 for duplicates:** creating a user with a taken username or email, changing to a taken
+  email, or bookmarking something already bookmarked clashes with an existing resource.
+  (409 is standard HTTP, not covered in the slides.)
+- **Login gives 200, not 201:** the token is returned to the client but not stored as a
+  resource on the server, so nothing with a URI is created.
+- **Wrong username or password gives one 401 with the same message:** saying which one was
+  wrong would tell an attacker which usernames exist.
+- **PATCH returns 200 with the updated user**, so the client sees the result without a
+  second request.
+- **Bookmarking a title that does not exist gives 400:** the URI points to the bookmark
+  collection, which exists. The invalid `tconst` is in the request body, so it is a bad
+  request, not a missing resource.
+- **PUT on a rating always gives 200**, whether it creates or replaces the rating: simpler for
+  the client, and PUT is idempotent (4-4, slide 5). 400 if the score is not a whole number
+  1–10. 404 if the title in the path does not exist.
+- **DELETE of something that does not exist gives 404**, so the client learns it made a
+  mistake. Deleting the whole search history gives 204 even if it was already empty.
 
 ## Open
-- Status codes for each route (6-2, slide 11). Next step.
 - Simple and structured search fail for guests: `search_history.user_id` is NOT NULL.
   Either the function skips the INSERT when there is no user, or those modes require
   login. The owner of 1-D.2 / 1-D.4 decides.
+- Delete user: if the password must be sent to confirm, a wrong password gives 403.
+  Agree with the owner of the user routes.
 - Whether a "top 10" route is needed (depends on the user stories).
