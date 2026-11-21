@@ -11,6 +11,9 @@ This list tracks what changed, why, and what is still pending.
 ### user functions
 - for the functions `Get_bookmarks`, `Get_search_history` and `Get_rating_history`: added limit and offset parameters (`limit_input DEFAULT 10` and `offset_input DEFAULT 0`) as required by 2-A.3.
 
+### find_person_by_name
+- added parameters to limit amount of results returned (`limit_input DEFAULT 10`) and to allow for paging (`offset_input DEFAULT 0`) as required by 2-A.3.
+
 ### person_words (1-D.10)
 - Added optional parameters `limit_input` (default 10) and `offset_input` (default 0).
   - Why: 1-D.10 specifies an optional limit, and 2-A.3 requires every list to be paged.
