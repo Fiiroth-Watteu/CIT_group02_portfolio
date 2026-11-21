@@ -331,7 +331,7 @@ FROM casted_as c
 JOIN person p ON c.person_id = p.person_id;
 
 -- 1-D.5 Find persons whose name contains a search text
-CREATE OR REPLACE FUNCTION find_person_by_name(search_text TEXT)
+CREATE OR REPLACE FUNCTION find_person_by_name(search_text TEXT, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
 RETURNS TABLE (
     person_id    CHAR(10),
     primary_name VARCHAR(256),
@@ -349,7 +349,9 @@ BEGIN
         p.death_year
     FROM person p
     WHERE p.primary_name ILIKE '%' || search_text || '%'
-    ORDER BY p.primary_name;
+    ORDER BY p.primary_name
+    LIMIT limit_input 
+    OFFSET offset_input;
 END;
 $$;
 
