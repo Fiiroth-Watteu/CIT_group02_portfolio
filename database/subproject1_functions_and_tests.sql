@@ -458,68 +458,107 @@ SELECT count(name_rating) AS persons_with_rating_after FROM person;
 SELECT * FROM get_person_rating('Tom Hanks');
 
 
+
+
 -- 1-D.8 Popular actors
 
--- Actors of a title ordered by decreasing name rating (uses the ratings from 1-D.7)
-DROP FUNCTION IF EXISTS popular_actors(TEXT);
+-- Actors of a title ordered by decreasing name rating.
+-- Pagination is handled in the Backend DAL.
 
-CREATE OR REPLACE FUNCTION popular_actors(input_tconst TEXT)
+DROP FUNCTION IF EXISTS public.popular_actors(TEXT);
+DROP FUNCTION IF EXISTS public.popular_actors(TEXT, INT, INT);
+
+CREATE OR REPLACE FUNCTION public.popular_actors(input_tconst TEXT)
 RETURNS TABLE (
-    person_id    CHAR(10),
+    person_id CHAR(10),
     primary_name VARCHAR(256),
-    name_rating  NUMERIC
+    name_rating NUMERIC
 )
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    RETURN QUERY
+LANGUAGE sql
+AS $function$
+    WITH movie_actors AS (
+        SELECT DISTINCT tp.nconst
+        FROM public.title_principals tp
+        WHERE tp.tconst = input_tconst
+          AND tp.category IN ('actor', 'actress')
+    ),
+    person_ratings AS (
+        SELECT
+            tp.nconst,
+            ROUND(
+                (
+                    SUM(tr.averagerating * tr.numvotes)
+                    / NULLIF(SUM(tr.numvotes), 0)
+                )::NUMERIC,
+                2
+            ) AS name_rating
+        FROM public.title_principals tp
+        JOIN public.title_ratings tr
+            ON tp.tconst = tr.tconst
+        WHERE tp.nconst IN (SELECT nconst FROM movie_actors)
+          AND tp.category IN ('actor', 'actress')
+          AND tr.numvotes > 0
+        GROUP BY tp.nconst
+    )
     SELECT
-        p.person_id,
-        p.primary_name,
-        COALESCE(p.name_rating, 0)
-    FROM casted_as c
-    JOIN person p ON p.person_id = c.person_id
-    WHERE c.title_id = input_tconst
-      AND c.category IN ('actor', 'actress')
-    GROUP BY p.person_id, p.primary_name, p.name_rating
-    ORDER BY COALESCE(p.name_rating, 0) DESC;
-END;
-$$;
+        ma.nconst,
+        nb.primaryname,
+        pr.name_rating
+    FROM movie_actors ma
+    JOIN public.name_basics nb
+        ON ma.nconst = nb.nconst
+    LEFT JOIN person_ratings pr
+        ON ma.nconst = pr.nconst
+    ORDER BY pr.name_rating DESC NULLS LAST, ma.nconst ASC;
+$function$;
 
-SELECT * FROM popular_actors('tt26693752');
-
+-- Test
+SELECT * FROM public.popular_actors('tt26693752');
 
 -- 1-D.9 Similar movies
 
--- Similarity = number of genres two titles share (top 20).
--- Genres are in the separate genre table, one row per (title, genre).
-DROP FUNCTION IF EXISTS movie_similarity(TEXT);
+-- Similarity = number of genres two titles share.
+-- Genres are stored in title_basics.genres.
 
-CREATE FUNCTION movie_similarity(input_id TEXT)
+DROP FUNCTION IF EXISTS public.movie_similarity(TEXT);
+DROP FUNCTION IF EXISTS public.movie_similarity(TEXT, INTEGER, INTEGER);
+
+CREATE OR REPLACE FUNCTION public.movie_similarity(
+    input_id TEXT,
+    limit_input INTEGER DEFAULT 20,
+    offset_input INTEGER DEFAULT 0
+)
 RETURNS TABLE (
-    title_id         CHAR(10),
-    primary_title    TEXT,
+    title_id CHAR(10),
+    primary_title TEXT,
     similarity_score INTEGER
 )
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    RETURN QUERY
+LANGUAGE sql
+AS $function$
+    WITH input_genres AS (
+        SELECT UNNEST(STRING_TO_ARRAY(tb.genres, ',')) AS genre
+        FROM public.title_basics tb
+        WHERE BTRIM(tb.tconst) = BTRIM(input_id)
+          AND tb.genres IS NOT NULL
+          AND tb.genres <> '\N'
+    )
     SELECT
-        t.title_id,
-        t.primary_title,
+        tb.tconst,
+        tb.primarytitle,
         COUNT(*)::INTEGER
-    FROM genre g1
-    JOIN genre g2 ON g2.genre = g1.genre AND g2.title_id <> g1.title_id
-    JOIN title t ON t.title_id = g2.title_id
-    WHERE g1.title_id = input_id
-    GROUP BY t.title_id, t.primary_title
-    ORDER BY COUNT(*) DESC, t.primary_title
-    LIMIT 20;
-END;
-$$;
+    FROM public.title_basics tb
+    CROSS JOIN LATERAL UNNEST(STRING_TO_ARRAY(tb.genres, ',')) AS g(genre)
+    JOIN input_genres ig ON ig.genre = g.genre
+    WHERE BTRIM(tb.tconst) <> BTRIM(input_id)
+      AND tb.genres IS NOT NULL
+      AND tb.genres <> '\N'
+    GROUP BY tb.tconst, tb.primarytitle
+    ORDER BY COUNT(*) DESC, tb.tconst ASC
+    LIMIT limit_input
+    OFFSET offset_input;
+$function$;
 
-SELECT * FROM movie_similarity('tt26693752');
+SELECT * FROM public.movie_similarity('tt26693752', 5, 0);
 
 
 -- 1-D.10 Frequent person words
