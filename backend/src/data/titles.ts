@@ -81,3 +81,9 @@ export async function searchTitles(
   );
   return result.rows;
 }
+
+// Whether a title exists, so a route can answer 404 for an unknown id (api-design.md).
+export async function titleExists(tconst: string): Promise<boolean> {
+  const result = await pool.query('SELECT 1 FROM title WHERE title_id = $1', [tconst]);
+  return (result.rowCount ?? 0) > 0;
+}

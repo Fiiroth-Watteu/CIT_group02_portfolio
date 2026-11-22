@@ -28,3 +28,25 @@ describe('GET /api/titles (search)', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('GET /api/titles/{tconst}/similar and /actors', () => {
+    it('returns similar titles with URIs', async () => {
+      const res = await request(app).get('/api/titles/tt26693752/similar?limit=3');
+      expect(res.status).toBe(200);
+      expect(res.body.items.length).toBe(3);
+      expect(res.body.items[0].url).toMatch(/^\/api\/titles\/tt\d+$/);
+    });
+  
+    it('returns the actors ordered by name rating', async () => {
+      const res = await request(app).get('/api/titles/tt26693752/actors');
+      expect(res.status).toBe(200);
+      expect(res.body.items[0]).toEqual({
+        url: '/api/persons/nm5419548', primary_name: 'Kim Nam-Hee', name_rating: 8.22,
+      });
+    });
+  
+    it('answers 404 for a title that does not exist', async () => {
+      const res = await request(app).get('/api/titles/tt0000000/similar');
+      expect(res.status).toBe(404);
+    });
+  });
