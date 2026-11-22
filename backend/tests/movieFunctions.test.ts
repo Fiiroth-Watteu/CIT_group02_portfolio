@@ -1,6 +1,18 @@
 ﻿import { describe, it, expect } from 'vitest';
 import { getPopularActors } from '../src/data/popularActors.js';
 import { getSimilarMovies } from '../src/data/movieSimilarity.js';
+import { simpleSearch, structuredSearch } from '../src/data/movieSearching.js'
+
+describe('simple movie search by title', () => {
+  it('returns matching movies', async () => {
+    const movies = await simpleSearch('casino', 5, 0);
+
+    expect(movies.length).toBeGreaterThan(0);
+    expect(movies.length).toBeLessThanOrEqual(5);
+    expect(movies[0]).toHaveProperty('title_id');
+    expect(movies[0]).toHaveProperty('primary_title');
+  })
+});
 
 describe('Popular actors database function', () => {
   it('returns matching actors', async () => {
