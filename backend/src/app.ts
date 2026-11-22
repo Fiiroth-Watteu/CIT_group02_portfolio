@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { tokensRouter } from './routes/tokens.js';
 import { healthRouter } from './routes/health.js';
 import { requireAuth, requireSelf } from './middleware/auth.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
@@ -15,6 +16,7 @@ app.use(express.json());
 
 // 3. Open routes
 app.use('/api/health', healthRouter);
+app.use('/api/tokens', tokensRouter);
 
 // 4. Everything under /api/users/{id} requires a token for that user (2-D.6):
 //    no valid token → 401, another user's id → 403
