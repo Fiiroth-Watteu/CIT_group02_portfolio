@@ -26,3 +26,15 @@ export async function relatedWords(
   );
   return result.rows;
 }
+
+// Words in the titles a person is involved in (1-D.10). The function pages internally
+// (subproject1-changes.md), so limit + 1 is passed to it for makePage.
+export async function personWords(nconst: string, limit: number, offset: number): Promise<WordRow[]> {
+    const result = await pool.query<WordRow>(
+      `SELECT word, frequency::int AS frequency
+       FROM person_words($1, $2, $3)
+       ORDER BY frequency DESC, word ASC`,
+      [nconst, limit + 1, offset],
+    );
+    return result.rows;
+  }

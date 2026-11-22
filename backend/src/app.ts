@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { personsRouter } from './routes/persons.js';
 import { wordsRouter } from './routes/words.js';
 import { titlesRouter } from './routes/titles.js';
 import { tokensRouter } from './routes/tokens.js';
@@ -27,6 +28,7 @@ app.use('/api/users/:id', requireAuth, requireSelf);
 // 5. Resource routers go here, after the guard
 app.use('/api/titles', titlesRouter);
 app.use('/api/words', wordsRouter);
+app.use('/api/persons', personsRouter);
 
 // 6. Nothing matched → 404
 app.use(notFoundHandler);
