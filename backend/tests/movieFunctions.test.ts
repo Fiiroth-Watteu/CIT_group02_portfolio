@@ -1,6 +1,6 @@
 ﻿import { describe, it, expect } from 'vitest';
 import { getPopularActors } from '../src/data/persons.js';
-import { getSimilarMovies } from '../src/data/movieSimilarity.js';
+import { getSimilarMovies } from '../src/data/titles.js';
 import { simpleSearch, structuredSearch } from '../src/data/titles.js'
 
 describe('simple movie search by title', () => {
