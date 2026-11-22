@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import jwt from 'jsonwebtoken';
 
 // Password hashing as in security lectures I and II.
 const ITERATIONS = 1000;
@@ -27,3 +28,29 @@ export async function verifyPassword(password: string, salt: string, oldhash: st
 Whoever writes POST /api/users calls generateSalt(), then hashPassword(salt, password), then Create_user(username, email, hash, salt). 
 Login fetches password_hash and salt by username, then calls verifyPassword.
 */
+
+// The token carries only the user id: it is readable by whoever holds it,
+// so it carries no secrets (8-2). Signed, so it cannot be changed without the secret
+// (security lecture II).
+export interface Claims {
+  id: number;
+}
+
+const TOKEN_LIFETIME = '1h';
+
+export function signToken(claims: Claims): string {
+  return jwt.sign(claims, process.env.JWT_SECRET ?? '', { expiresIn: TOKEN_LIFETIME });
+}
+
+// Returns the claims if the token is valid and not expired, otherwise undefined.
+export function verifyToken(token: string): Claims | undefined {
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET ?? '');
+    if (typeof payload === 'object' && typeof payload.id === 'number') {
+      return { id: payload.id };
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
