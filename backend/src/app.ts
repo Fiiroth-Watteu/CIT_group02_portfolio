@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { usersRouter } from './routes/users.js';
 import { personsRouter } from './routes/persons.js';
 import { wordsRouter } from './routes/words.js';
 import { titlesRouter } from './routes/titles.js';
@@ -29,6 +30,7 @@ app.use('/api/users/:id', requireAuth, requireSelf);
 app.use('/api/titles', titlesRouter);
 app.use('/api/words', wordsRouter);
 app.use('/api/persons', personsRouter);
+app.use('/api/users', usersRouter);
 
 // 6. Nothing matched → 404
 app.use(notFoundHandler);

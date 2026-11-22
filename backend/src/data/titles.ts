@@ -10,7 +10,7 @@ export interface Resultrows {
 export async function simpleSearch(input: string, limit: number, offset: number): Promise<Resultrows[]>{
     //wip
     const result = await pool.query<Resultrows>(
-        `SELECT String_search($1,,$2,$3)`, [input, limit, offset]
+        `SELECT String_search($1,$2,$3)`, [input, limit, offset]
     );
     return result.rows;
 }
