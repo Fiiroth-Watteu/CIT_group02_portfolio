@@ -142,6 +142,8 @@ LANGUAGE plpgsql AS $$
   END;
 $$;
 
+DROP FUNCTION IF EXISTS get_bookmarks(integer);
+
 -- Retrieve title and person bookmarks for a user.
 -- Title IDs and person IDs can be told apart by the first two characters (tt / nm).
 CREATE OR REPLACE FUNCTION Get_bookmarks (user_input INT, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
@@ -159,6 +161,8 @@ LANGUAGE plpgsql AS $$
   END;
 $$;
 
+DROP FUNCTION IF EXISTS get_search_history(integer);
+
 -- Retrieve search history for a user
 CREATE OR REPLACE FUNCTION Get_search_history (user_input INT, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
 RETURNS TABLE (
@@ -174,6 +178,8 @@ LANGUAGE plpgsql AS $$
     LIMIT limit_input OFFSET offset_input;
   END;
 $$;
+
+DROP FUNCTION IF EXISTS get_rating_history(integer);
 
 -- Retrieve rating history for a user
 CREATE OR REPLACE FUNCTION Get_rating_history (user_input INT, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
@@ -218,7 +224,7 @@ SELECT * FROM Get_bookmarks (test_user_id());
 
 
 -- 1-D.2 Simple search
-
+DROP FUNCTION IF EXISTS string_search(varchar, integer);
 -- Find titles where the search string is a substring of the title.
 -- The search is stored in the search history as a side effect.
 CREATE OR REPLACE FUNCTION String_search(S_input VARCHAR(255), user_searching int, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
@@ -283,7 +289,7 @@ SELECT * FROM ratings WHERE title_id = 'tt0052520';
 
 
 -- 1-D.4 Structured string search
-
+DROP FUNCTION IF EXISTS structured_string_search(varchar, varchar, varchar, varchar, integer);
 -- All four parameters are used as case-insensitive substrings and the results
 -- are intersected. The search is stored in the search history as a side effect.
 -- Note: an empty parameter becomes '%%', which only matches non-NULL values.
@@ -330,6 +336,7 @@ SELECT
 FROM casted_as c
 JOIN person p ON c.person_id = p.person_id;
 
+DROP FUNCTION IF EXISTS find_person_by_name(text);
 -- 1-D.5 Find persons whose name contains a search text
 CREATE OR REPLACE FUNCTION find_person_by_name(search_text TEXT)
 RETURNS TABLE (
@@ -356,6 +363,7 @@ $$;
 -- 1-D.6 Most frequent co-players of an actor (top 20).
 -- Columns of the CTEs are qualified (t.person_id) to avoid a clash with the
 -- output column person_id.
+DROP FUNCTION IF EXISTS find_co_players(text);
 CREATE OR REPLACE FUNCTION find_co_players(actor_name TEXT)
 RETURNS TABLE (
     person_id    CHAR(10),
@@ -426,6 +434,7 @@ BEGIN
 END;
 $$;
 
+DROP FUNCTION IF EXISTS get_person_rating(text);
 CREATE OR REPLACE FUNCTION get_person_rating(person_name TEXT)
 RETURNS TABLE (
     person_id    CHAR(10),
@@ -474,40 +483,14 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 AS $function$
-    WITH movie_actors AS (
-        SELECT DISTINCT tp.nconst
-        FROM public.title_principals tp
-        WHERE tp.tconst = input_tconst
-          AND tp.category IN ('actor', 'actress')
-    ),
-    person_ratings AS (
-        SELECT
-            tp.nconst,
-            ROUND(
-                (
-                    SUM(tr.averagerating * tr.numvotes)
-                    / NULLIF(SUM(tr.numvotes), 0)
-                )::NUMERIC,
-                2
-            ) AS name_rating
-        FROM public.title_principals tp
-        JOIN public.title_ratings tr
-            ON tp.tconst = tr.tconst
-        WHERE tp.nconst IN (SELECT nconst FROM movie_actors)
-          AND tp.category IN ('actor', 'actress')
-          AND tr.numvotes > 0
-        GROUP BY tp.nconst
-    )
-    SELECT
-        ma.nconst,
-        nb.primaryname,
-        pr.name_rating
-    FROM movie_actors ma
-    JOIN public.name_basics nb
-        ON ma.nconst = nb.nconst
-    LEFT JOIN person_ratings pr
-        ON ma.nconst = pr.nconst
-    ORDER BY pr.name_rating DESC NULLS LAST, ma.nconst ASC;
+    -- Actors in the title, ordered by their stored name rating (1-D.7).
+    -- Uses casted_as and person, not the source tables, which are dropped after migration (1-B.2).
+    SELECT DISTINCT p.person_id, p.primary_name, p.name_rating
+    FROM casted_as c
+    JOIN person p ON p.person_id = c.person_id
+    WHERE c.title_id = input_tconst
+      AND c.category IN ('actor', 'actress')
+    ORDER BY p.name_rating DESC NULLS LAST, p.person_id ASC;
 $function$;
 
 -- Test
@@ -533,27 +516,17 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 AS $function$
-    WITH input_genres AS (
-        SELECT UNNEST(STRING_TO_ARRAY(tb.genres, ',')) AS genre
-        FROM public.title_basics tb
-        WHERE BTRIM(tb.tconst) = BTRIM(input_id)
-          AND tb.genres IS NOT NULL
-          AND tb.genres <> '\N'
-    )
-    SELECT
-        tb.tconst,
-        tb.primarytitle,
-        COUNT(*)::INTEGER
-    FROM public.title_basics tb
-    CROSS JOIN LATERAL UNNEST(STRING_TO_ARRAY(tb.genres, ',')) AS g(genre)
-    JOIN input_genres ig ON ig.genre = g.genre
-    WHERE BTRIM(tb.tconst) <> BTRIM(input_id)
-      AND tb.genres IS NOT NULL
-      AND tb.genres <> '\N'
-    GROUP BY tb.tconst, tb.primarytitle
-    ORDER BY COUNT(*) DESC, tb.tconst ASC
-    LIMIT limit_input
-    OFFSET offset_input;
+    -- Similarity = number of genres shared with the input title (1-D.9).
+    -- Uses genre and title, not the source tables, which are dropped after migration (1-B.2).
+    SELECT t.title_id, t.primary_title, COUNT(*)::INTEGER
+    FROM genre g1
+    JOIN genre g2 ON g2.genre = g1.genre AND g2.title_id <> g1.title_id
+    JOIN title t ON t.title_id = g2.title_id
+    WHERE g1.title_id = BTRIM(input_id)
+      AND g1.genre <> '\N'
+    GROUP BY t.title_id, t.primary_title
+    ORDER BY COUNT(*) DESC, t.title_id ASC
+    LIMIT limit_input OFFSET offset_input;
 $function$;
 
 SELECT * FROM public.movie_similarity('tt26693752', 5, 0);
@@ -620,7 +593,7 @@ BEGIN
     RAISE NOTICE '%', q;
 
     RETURN QUERY EXECUTE
-        'SELECT t.title_id, t.primary_title FROM title t, (' || q || ') w WHERE t.title_id = w.tconst'
+        'SELECT DISTINCT t.title_id, t.primary_title FROM title t, (' || q || ') w WHERE t.title_id = w.tconst'
         USING keywords;
 END;
 $$
