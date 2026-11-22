@@ -15,12 +15,19 @@
 --   psql -U postgres -a -d imdb -f subproject1_functions_and_tests.sql > output.txt 2>&1
 -- (2>&1 so RAISE NOTICE output, i.e. the dynamically built queries, ends up in the file too)
 
+-- Salt stored next to the hash (security lecture I). Added for Subproject 2 (2-A.4).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS salt TEXT;
 
 -- 1-D.1 Basic framework functionality
 
 -- Create a user if the username isn't taken and the email isn't tied to a user.
 -- Note: the password is stored as plain text, not as a hash.
-CREATE OR REPLACE FUNCTION Create_user (name_input VARCHAR(100), email_input VARCHAR(255), pass_input TEXT)
+DROP FUNCTION IF EXISTS Create_user(VARCHAR, VARCHAR, TEXT);
+DROP FUNCTION IF EXISTS Create_user(VARCHAR, VARCHAR, TEXT, TEXT);
+
+-- Create a user if the username isn't taken and the email isn't tied to a user.
+-- pass_input is the salted hash made by the backend; salt_input is its salt.
+CREATE OR REPLACE FUNCTION Create_user (name_input VARCHAR(100), email_input VARCHAR(255), pass_input TEXT, salt_input TEXT DEFAULT NULL)
 RETURNS VARCHAR
 LANGUAGE plpgsql AS $$
   DECLARE status_output VARCHAR := 'start';
@@ -32,7 +39,7 @@ LANGUAGE plpgsql AS $$
       status_output := 'email already has a user';
     END IF;
     IF status_output = 'start' THEN
-      INSERT INTO users(username, email, password_hash) VALUES (name_input, email_input, pass_input);
+      INSERT INTO users(username, email, password_hash, salt) VALUES (name_input, email_input, pass_input, salt_input);
       status_output := 'user has been created';
     END IF;
     RETURN status_output;

@@ -11,7 +11,8 @@ CREATE TABLE users(
      user_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
      username VARCHAR(100) NOT NULL UNIQUE,
      email VARCHAR(255) NOT NULL UNIQUE,
-     password_hash TEXT NOT NULL
+     password_hash TEXT NOT NULL,
+     salt TEXT
 );
  
 --Movie Data Model-person bookmark table--
