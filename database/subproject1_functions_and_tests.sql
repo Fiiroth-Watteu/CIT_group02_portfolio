@@ -142,6 +142,8 @@ LANGUAGE plpgsql AS $$
   END;
 $$;
 
+DROP FUNCTION IF EXISTS get_bookmarks(integer);
+
 -- Retrieve title and person bookmarks for a user.
 -- Title IDs and person IDs can be told apart by the first two characters (tt / nm).
 CREATE OR REPLACE FUNCTION Get_bookmarks (user_input INT, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
@@ -159,6 +161,8 @@ LANGUAGE plpgsql AS $$
   END;
 $$;
 
+DROP FUNCTION IF EXISTS get_search_history(integer);
+
 -- Retrieve search history for a user
 CREATE OR REPLACE FUNCTION Get_search_history (user_input INT, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
 RETURNS TABLE (
@@ -174,6 +178,8 @@ LANGUAGE plpgsql AS $$
     LIMIT limit_input OFFSET offset_input;
   END;
 $$;
+
+DROP FUNCTION IF EXISTS get_rating_history(integer);
 
 -- Retrieve rating history for a user
 CREATE OR REPLACE FUNCTION Get_rating_history (user_input INT, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
@@ -218,7 +224,7 @@ SELECT * FROM Get_bookmarks (test_user_id());
 
 
 -- 1-D.2 Simple search
-
+DROP FUNCTION IF EXISTS string_search(varchar, integer);
 -- Find titles where the search string is a substring of the title.
 -- The search is stored in the search history as a side effect.
 CREATE OR REPLACE FUNCTION String_search(S_input VARCHAR(255), user_searching int, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
@@ -283,7 +289,7 @@ SELECT * FROM ratings WHERE title_id = 'tt0052520';
 
 
 -- 1-D.4 Structured string search
-
+DROP FUNCTION IF EXISTS structured_string_search(varchar, varchar, varchar, varchar, integer);
 -- All four parameters are used as case-insensitive substrings and the results
 -- are intersected. The search is stored in the search history as a side effect.
 -- Note: an empty parameter becomes '%%', which only matches non-NULL values.
@@ -330,6 +336,7 @@ SELECT
 FROM casted_as c
 JOIN person p ON c.person_id = p.person_id;
 
+DROP FUNCTION IF EXISTS find_person_by_name(text);
 -- 1-D.5 Find persons whose name contains a search text
 CREATE OR REPLACE FUNCTION find_person_by_name(search_text TEXT, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
 RETURNS TABLE (
@@ -358,6 +365,7 @@ $$;
 -- 1-D.6 Most frequent co-players of an actor (top 20).
 -- Columns of the CTEs are qualified (t.person_id) to avoid a clash with the
 -- output column person_id.
+DROP FUNCTION IF EXISTS find_co_players(text);
 CREATE OR REPLACE FUNCTION find_co_players(actor_name TEXT)
 RETURNS TABLE (
     person_id    CHAR(10),
@@ -428,6 +436,7 @@ BEGIN
 END;
 $$;
 
+DROP FUNCTION IF EXISTS get_person_rating(text);
 CREATE OR REPLACE FUNCTION get_person_rating(person_name TEXT)
 RETURNS TABLE (
     person_id    CHAR(10),
@@ -476,40 +485,14 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 AS $function$
-    WITH movie_actors AS (
-        SELECT DISTINCT tp.nconst
-        FROM public.title_principals tp
-        WHERE tp.tconst = input_tconst
-          AND tp.category IN ('actor', 'actress')
-    ),
-    person_ratings AS (
-        SELECT
-            tp.nconst,
-            ROUND(
-                (
-                    SUM(tr.averagerating * tr.numvotes)
-                    / NULLIF(SUM(tr.numvotes), 0)
-                )::NUMERIC,
-                2
-            ) AS name_rating
-        FROM public.title_principals tp
-        JOIN public.title_ratings tr
-            ON tp.tconst = tr.tconst
-        WHERE tp.nconst IN (SELECT nconst FROM movie_actors)
-          AND tp.category IN ('actor', 'actress')
-          AND tr.numvotes > 0
-        GROUP BY tp.nconst
-    )
-    SELECT
-        ma.nconst,
-        nb.primaryname,
-        pr.name_rating
-    FROM movie_actors ma
-    JOIN public.name_basics nb
-        ON ma.nconst = nb.nconst
-    LEFT JOIN person_ratings pr
-        ON ma.nconst = pr.nconst
-    ORDER BY pr.name_rating DESC NULLS LAST, ma.nconst ASC;
+    -- Actors in the title, ordered by their stored name rating (1-D.7).
+    -- Uses casted_as and person, not the source tables, which are dropped after migration (1-B.2).
+    SELECT DISTINCT p.person_id, p.primary_name, p.name_rating
+    FROM casted_as c
+    JOIN person p ON p.person_id = c.person_id
+    WHERE c.title_id = input_tconst
+      AND c.category IN ('actor', 'actress')
+    ORDER BY p.name_rating DESC NULLS LAST, p.person_id ASC;
 $function$;
 
 -- Test
@@ -535,27 +518,17 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 AS $function$
-    WITH input_genres AS (
-        SELECT UNNEST(STRING_TO_ARRAY(tb.genres, ',')) AS genre
-        FROM public.title_basics tb
-        WHERE BTRIM(tb.tconst) = BTRIM(input_id)
-          AND tb.genres IS NOT NULL
-          AND tb.genres <> '\N'
-    )
-    SELECT
-        tb.tconst,
-        tb.primarytitle,
-        COUNT(*)::INTEGER
-    FROM public.title_basics tb
-    CROSS JOIN LATERAL UNNEST(STRING_TO_ARRAY(tb.genres, ',')) AS g(genre)
-    JOIN input_genres ig ON ig.genre = g.genre
-    WHERE BTRIM(tb.tconst) <> BTRIM(input_id)
-      AND tb.genres IS NOT NULL
-      AND tb.genres <> '\N'
-    GROUP BY tb.tconst, tb.primarytitle
-    ORDER BY COUNT(*) DESC, tb.tconst ASC
-    LIMIT limit_input
-    OFFSET offset_input;
+    -- Similarity = number of genres shared with the input title (1-D.9).
+    -- Uses genre and title, not the source tables, which are dropped after migration (1-B.2).
+    SELECT t.title_id, t.primary_title, COUNT(*)::INTEGER
+    FROM genre g1
+    JOIN genre g2 ON g2.genre = g1.genre AND g2.title_id <> g1.title_id
+    JOIN title t ON t.title_id = g2.title_id
+    WHERE g1.title_id = BTRIM(input_id)
+      AND g1.genre <> '\N'
+    GROUP BY t.title_id, t.primary_title
+    ORDER BY COUNT(*) DESC, t.title_id ASC
+    LIMIT limit_input OFFSET offset_input;
 $function$;
 
 SELECT * FROM public.movie_similarity('tt26693752', 5, 0);
@@ -600,41 +573,39 @@ $$;
 -- page 35-36's dynamic EXECUTE, since page 27's INTERSECT is hardcoded
 -- to 3 words but VARIADIC gives an array of unknown length.
 
-DROP FUNCTION IF EXISTS exact_match(text[]);
-
 CREATE OR REPLACE FUNCTION exact_match(VARIADIC keywords text[])
 RETURNS TABLE (title_id char(10), title text)
 AS $$
 DECLARE
-    q text;  -- holds the dynamically built query
-    i int;   -- loop counter over keywords
+    q text;
+    i int;
 BEGIN
-
-      -- lowercase all keywords, because every word in wi is stored in lowercase
+    -- lowercase all keywords, because every word in wi is stored in lowercase
     FOR i IN 1..array_length(keywords, 1) LOOP
         keywords[i] := lower(keywords[i]);
     END LOOP;
 
-    -- start the chain with the first keyword (no INTERSECT yet)
-    q := 'SELECT tconst FROM wi WHERE word = ''' || keywords[1] || '''';
-
-    -- add one INTERSECT clause per remaining keyword (page 27's pattern, built dynamically), starting from the 2nd word
+    -- the keywords are passed separately (USING), never concatenated into the SQL text.
+    -- Only the index i, generated by the function itself, becomes part of the text.
+    q := 'SELECT tconst FROM wi WHERE word = $1[1]';
     FOR i IN 2..array_length(keywords, 1) LOOP
-        q := q || ' INTERSECT SELECT tconst FROM wi WHERE word = ''' || keywords[i] || '''';
+        q := q || ' INTERSECT SELECT tconst FROM wi WHERE word = $1[' || i || ']';
     END LOOP;
 
-    -- print the built query, for debugging (page 36's trick)
     RAISE NOTICE '%', q;
 
-    -- run the built query, joined with title for the title (as on page 27)
     RETURN QUERY EXECUTE
-        'SELECT t.title_id, t.primary_title FROM title t, (' || q || ') w WHERE t.title_id = w.tconst';
+        'SELECT DISTINCT t.title_id, t.primary_title FROM title t, (' || q || ') w WHERE t.title_id = w.tconst'
+        USING keywords;
 END;
 $$
 LANGUAGE plpgsql;
 
--- Test: should return exactly one title (Adam's Apples)
+-- normal search, same result as before
 SELECT * FROM exact_match('apple', 'mads', 'mikkelsen');
+--injection attempts: must give a normal (possibly empty) result, not an error
+SELECT * FROM exact_match('o''brien');
+SELECT * FROM exact_match('x'' OR ''1''=''1');
 
 
 -- 1-D.12 Best match
@@ -643,45 +614,34 @@ SELECT * FROM exact_match('apple', 'mads', 'mikkelsen');
 -- as exact_match, but UNION ALL instead of INTERSECT, plus a relevance score
 -- summed up per title.
 
-DROP FUNCTION IF EXISTS best_match(text[]);
-
 CREATE OR REPLACE FUNCTION best_match(VARIADIC keywords text[])
 RETURNS TABLE (title_id char(10), rank BIGINT, title text)
 AS $$
 DECLARE
-    q text;  -- holds the dynamically built query (just the raw tconst+relevance pairs,
-             -- NOT the aggregation - that happens later, in the outer query)
+    q text;
     i int;
 BEGIN
-
-      -- lowercase all keywords, because every word in wi is stored in lowercase
     FOR i IN 1..array_length(keywords, 1) LOOP
         keywords[i] := lower(keywords[i]);
     END LOOP;
 
-    -- each keyword gets relevance = 1. A title matching 3/3 keywords ends up with
-    -- 3 rows here, which sum() turns into rank = 3 in the outer query.
-    q := 'SELECT tconst, 1 relevance FROM wi WHERE word = ''' || keywords[1] || '''';
-
-    -- UNION ALL (not INTERSECT!) - every match is kept as its own row, not just
-    -- the titles where ALL words matched.
+    q := 'SELECT tconst, 1 relevance FROM wi WHERE word = $1[1]';
     FOR i IN 2..array_length(keywords, 1) LOOP
-        q := q || ' UNION ALL SELECT tconst, 1 relevance FROM wi WHERE word = ''' || keywords[i] || '''';
+        q := q || ' UNION ALL SELECT tconst, 1 relevance FROM wi WHERE word = $1[' || i || ']';
     END LOOP;
 
     RAISE NOTICE '%', q;
 
-    -- sum(relevance) lives in the outer query: q only produces the raw per-word
-    -- rows, the aggregation into a rank per title happens once everything is
-    -- joined and grouped
     RETURN QUERY EXECUTE
-        'SELECT t.title_id, sum(relevance) rank, t.primary_title FROM title t, (' || q || ') w WHERE t.title_id = w.tconst GROUP BY t.title_id, t.primary_title ORDER BY rank DESC;';
+        'SELECT t.title_id, sum(relevance) rank, t.primary_title FROM title t, (' || q || ') w WHERE t.title_id = w.tconst GROUP BY t.title_id, t.primary_title ORDER BY rank DESC'
+        USING keywords;
 END;
 $$
 LANGUAGE plpgsql;
 
--- Test: Adam's Apples should be on top with rank 3 (top 10 shown, the full result is large)
 SELECT * FROM best_match('apple', 'mads', 'mikkelsen') ORDER BY rank DESC LIMIT 10;
+SELECT * FROM best_match('o''brien') LIMIT 10;
+
 
 
 -- 1-D.13 Word-to-words
@@ -690,47 +650,37 @@ SELECT * FROM best_match('apple', 'mads', 'mikkelsen') ORDER BY rank DESC LIMIT 
 -- titles. Result: a broad set of titles, so the word counts are dominated by
 -- generic words (e.g. "self", "episode"), not necessarily specific to the search.
 
-DROP FUNCTION IF EXISTS word_to_words_any(text[]);
-
 CREATE OR REPLACE FUNCTION word_to_words_any(VARIADIC keywords text[])
 RETURNS TABLE (word text, frequency BIGINT)
 AS $$
 DECLARE
-    q text;  -- step 1: raw (tconst, relevance) pairs, one per keyword match.
-             -- relevance isn't used here, q is only a source of matching tconst values
+    q text;
     i int;
 BEGIN
-
-      -- lowercase all keywords, because every word in wi is stored in lowercase
     FOR i IN 1..array_length(keywords, 1) LOOP
         keywords[i] := lower(keywords[i]);
     END LOOP;
 
-    q := 'SELECT tconst, 1 relevance FROM wi WHERE word = ''' || keywords[1] || '''';
-
+    q := 'SELECT tconst, 1 relevance FROM wi WHERE word = $1[1]';
     FOR i IN 2..array_length(keywords, 1) LOOP
-        q := q || ' UNION ALL SELECT tconst, 1 relevance FROM wi WHERE word = ''' || keywords[i] || '''';
+        q := q || ' UNION ALL SELECT tconst, 1 relevance FROM wi WHERE word = $1[' || i || ']';
     END LOOP;
 
     RAISE NOTICE '%', q;
 
-    -- step 2: for every title found in q, count how many times each word occurs
-    -- ACROSS ALL those titles combined (GROUP BY word, not GROUP BY tconst)
     RETURN QUERY EXECUTE
-        'SELECT word, count(*) frequency FROM wi t, (' || q || ') w WHERE t.tconst = w.tconst GROUP BY t.word ORDER BY frequency DESC;';
+        'SELECT t.word, count(*) frequency FROM wi t, (' || q || ') w WHERE t.tconst = w.tconst GROUP BY t.word ORDER BY frequency DESC'
+        USING keywords;
 END;
 $$
 LANGUAGE plpgsql;
 
--- Test: generic words dominate (top 10 shown)
 SELECT * FROM word_to_words_any('apple', 'mads', 'mikkelsen') ORDER BY frequency DESC LIMIT 10;
 
 
 -- EXACT-MATCH variant: step 1 reuses exact_match's title-finder (INTERSECT -
 -- titles matching ALL keywords), step 2 counts words across those (far fewer)
 -- titles. Result: the word counts stay specific to the actual search.
-
-DROP FUNCTION IF EXISTS word_to_words_all(text[]);
 
 CREATE OR REPLACE FUNCTION word_to_words_all(VARIADIC keywords text[])
 RETURNS TABLE (word text, frequency BIGINT)
@@ -739,38 +689,31 @@ DECLARE
     q text;
     i int;
 BEGIN
-
-        -- lowercase all keywords, because every word in wi is stored in lowercase
     FOR i IN 1..array_length(keywords, 1) LOOP
         keywords[i] := lower(keywords[i]);
     END LOOP;
 
-    -- start the chain with the first keyword (no INTERSECT yet)
-    q := 'SELECT tconst FROM wi WHERE word = ''' || keywords[1] || '''';
-
-    -- INTERSECT: only titles containing EVERY keyword survive, so q ends up with
-    -- very few titles (often just one, as in the "Adam's Apples" example)
+    q := 'SELECT tconst FROM wi WHERE word = $1[1]';
     FOR i IN 2..array_length(keywords, 1) LOOP
-        q := q || ' INTERSECT SELECT tconst FROM wi WHERE word = ''' || keywords[i] || '''';
+        q := q || ' INTERSECT SELECT tconst FROM wi WHERE word = $1[' || i || ']';
     END LOOP;
 
     RAISE NOTICE '%', q;
 
-    -- same step 2 as word_to_word, just on a much smaller set of titles
     RETURN QUERY EXECUTE
-        'SELECT word, count(*) frequency FROM wi t, (' || q || ') w WHERE t.tconst = w.tconst GROUP BY t.word ORDER BY frequency DESC;';
+        'SELECT t.word, count(*) frequency FROM wi t, (' || q || ') w WHERE t.tconst = w.tconst GROUP BY t.word ORDER BY frequency DESC'
+        USING keywords;
 END;
 $$
 LANGUAGE plpgsql;
 
--- Test: words specific to Adam's Apples (top 10 shown)
 SELECT * FROM word_to_words_all('apple', 'mads', 'mikkelsen') ORDER BY frequency DESC LIMIT 10;
+SELECT * FROM word_to_words_all('o''brien') LIMIT 10;
 
 
 -- 1-D.14 Weighted querying: wi_weighted + weighted_match
 -- Rerunnable: drops everything first.
 
-DROP FUNCTION IF EXISTS weighted_match(text[]);
 DROP TABLE IF EXISTS wi_weighted;
 
 -- Weighted inverted index: one row per (title, term) with a TF-IDF weight.
@@ -827,25 +770,24 @@ DECLARE
     q text;
     i int;
 BEGIN
-
-      -- lowercase all keywords, because every word in wi is stored in lowercase
+    -- lowercase all keywords, because every term in wi_weighted is stored in lowercase
     FOR i IN 1..array_length(keywords, 1) LOOP
         keywords[i] := lower(keywords[i]);
     END LOOP;
 
-    q := 'SELECT tconst, weight FROM wi_weighted WHERE word = ''' || keywords[1] || '''';
-
+    q := 'SELECT tconst, weight FROM wi_weighted WHERE word = $1[1]';
     FOR i IN 2..array_length(keywords, 1) LOOP
-        q := q || ' UNION ALL SELECT tconst, weight FROM wi_weighted WHERE word = ''' || keywords[i] || '''';
+        q := q || ' UNION ALL SELECT tconst, weight FROM wi_weighted WHERE word = $1[' || i || ']';
     END LOOP;
 
     RAISE NOTICE '%', q;
 
     RETURN QUERY EXECUTE
-        'SELECT t.title_id, sum(weight) rank, t.primary_title FROM title t, (' || q || ') w WHERE t.title_id = w.tconst GROUP BY t.title_id, t.primary_title ORDER BY rank DESC;';
+        'SELECT t.title_id, sum(weight) rank, t.primary_title FROM title t, (' || q || ') w WHERE t.title_id = w.tconst GROUP BY t.title_id, t.primary_title ORDER BY rank DESC'
+        USING keywords;
 END;
 $$
 LANGUAGE plpgsql;
 
--- Test (full names as one keyword): Adam's Apples should rank first
 SELECT * FROM weighted_match('adams', 'apples', 'mads mikkelsen', 'ulrich thomsen') ORDER BY rank DESC LIMIT 10;
+SELECT * FROM weighted_match('o''brien') LIMIT 10;
