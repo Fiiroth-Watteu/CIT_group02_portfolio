@@ -564,29 +564,28 @@ SELECT * FROM public.movie_similarity('tt26693752', 5, 0);
 DROP FUNCTION IF EXISTS person_words(TEXT);
 DROP FUNCTION IF EXISTS person_words(TEXT, INT, INT);
 
-CREATE OR REPLACE FUNCTION person_words(input_name TEXT, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
+CREATE OR REPLACE FUNCTION person_words(input_person_id TEXT, limit_input INT DEFAULT 10, offset_input INT DEFAULT 0)
 RETURNS TABLE (word TEXT, frequency BIGINT)
 LANGUAGE plpgsql
 AS $$
 BEGIN
+    -- The person is identified by id, because the API reaches this through the person's
+    -- URI (2-A.2) and names are not unique. casted_as has person_id, so no join to person.
     RETURN QUERY
-    SELECT
-        w.word,
-        COUNT(*) AS frequency
-    FROM person p
-    JOIN casted_as c ON c.person_id = p.person_id
+    SELECT w.word, COUNT(*) AS frequency
+    FROM casted_as c
     JOIN wi w ON w.tconst = c.title_id
-    WHERE p.primary_name = input_name
+    WHERE c.person_id = BTRIM(input_person_id)
     GROUP BY w.word
-    -- Oder by frequency descending, then by word ascending for when two words have the same frequency
+    -- Order by frequency descending, then by word ascending for when two words have the same frequency
     ORDER BY frequency DESC, w.word ASC
     LIMIT limit_input OFFSET offset_input;
 END;
 $$;
 
-   SELECT * FROM person_words('Tom Hanks');         -- default: first 10
-   SELECT * FROM person_words('Tom Hanks', 5);      -- page size 5
-   SELECT * FROM person_words('Tom Hanks', 5, 5);   -- second page of 5
+SELECT * FROM person_words('nm0000158');         -- default: first 10
+SELECT * FROM person_words('nm0000158', 5);      -- page size 5
+SELECT * FROM person_words('nm0000158', 5, 5);   -- second page of 5
 
 
 -- =====================================================================

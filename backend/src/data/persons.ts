@@ -70,3 +70,9 @@ export async function getPopularActors(
 
   return result.rows;
 }
+
+// Whether a person exists, so a route can answer 404 for an unknown id (api-design.md).
+export async function personExists(nconst: string): Promise<boolean> {
+  const result = await pool.query('SELECT 1 FROM person WHERE person_id = $1', [nconst]);
+  return (result.rowCount ?? 0) > 0;
+}
