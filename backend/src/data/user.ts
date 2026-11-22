@@ -12,3 +12,11 @@ export async function createUser(username:string, email:string, password:string)
     
     return result.rows;
 }
+
+export async function deleteUser(username:string, password:string): Promise<ResultString[]> {
+    const result = await pool.query<ResultString>(
+        `SELECT Delete_user($1, $2)`, [username, password]
+    );
+
+    return result.rows;
+}
