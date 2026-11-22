@@ -20,3 +20,9 @@ export async function giveRating(user: number, title: string, score: number): Pr
     return result.rows[0].message;
 }
 
+export async function deleteRating(user: number, title: string): Promise<string>{
+    const result = await pool.query<{ message: string }>(
+        `SELECT Delete_rating($1, $2) AS message`, [user, title]
+    );
+    return result.rows[0].message;
+}

@@ -284,6 +284,23 @@ LANGUAGE plpgsql AS $$
   END;
 $$;
 
+CREATE OR REPLACE FUNCTION Delete_rating (user_input INT, title_input char(10))
+RETURNS VARCHAR
+LANGUAGE plpgsql AS $$
+  DECLARE status_output VARCHAR := 'start';
+  BEGIN
+    IF NOT EXISTS (SELECT * FROM "public".rating_history WHERE user_input = rating_history.user_id AND title_input = rating_history.title_id) THEN
+      status_output := 'rating does not exist';
+    END IF;
+    IF status_output = 'start' THEN
+      DELETE FROM rating_history
+      WHERE user_input = rating_history.user_id AND title_input = rating_history.title_id;
+      status_output := 'rating for ' || title_input || ' has been deleted'
+    END IF;
+    RETURN status_output;
+  END;
+$$;
+
 -- Test: rating history and the title's rating before / after, then a second rating of the same title
 SELECT * FROM Get_rating_history (test_user_id());
 SELECT * FROM ratings WHERE title_id = 'tt0052520';

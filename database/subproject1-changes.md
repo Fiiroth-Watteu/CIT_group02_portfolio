@@ -11,6 +11,9 @@ This list tracks what changed, why, and what is still pending.
 ### user functions
 - for the functions `Get_bookmarks`, `Get_search_history` and `Get_rating_history`: added limit and offset parameters (`limit_input DEFAULT 10` and `offset_input DEFAULT 0`) as required by 2-A.3.
 
+### ratings
+- added a whole function to allow ratings to be deleted
+
 ### find_person_by_name
 - added parameters to limit amount of results returned (`limit_input DEFAULT 10`) and to allow for paging (`offset_input DEFAULT 0`) as required by 2-A.3.
 
