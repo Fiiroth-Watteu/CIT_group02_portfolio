@@ -1,5 +1,5 @@
 ﻿import { describe, it, expect } from 'vitest';
-import { getPersonRating } from '../src/data/personRating.js';
+import { getPersonRating } from '../src/data/persons.js';
 
 describe('Person rating database function', () => {
   it('returns matching persons in the correct order', async () => {
