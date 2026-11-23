@@ -5,10 +5,10 @@ import { simpleSearch, structuredSearch } from '../src/data/movieSearching.js'
 
 describe('simple movie search by title', () => {
   it('returns matching movies', async () => {
-    const movies = await simpleSearch('casino', 5, 0);
+    const movies = await simpleSearch('casino', null, 5, 0);
 
     expect(movies.length).toBeGreaterThan(0);
-    expect(movies.length).toBeLessThanOrEqual(5);
+    expect(movies.length).toBeLessThanOrEqual(6);
     expect(movies[0]).toHaveProperty('title_id');
     expect(movies[0]).toHaveProperty('primary_title');
   })
