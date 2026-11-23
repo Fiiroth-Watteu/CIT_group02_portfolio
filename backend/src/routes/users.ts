@@ -1,6 +1,7 @@
 import { Router } from 'express';
+
 import { generateSalt, hashPassword } from '../auth/crypto.js';
-import { createUser, findUserForLogin } from '../data/user.js';
+import { createUser, findUserForLogin, deleteUser} from '../data/user.js';
 
 export const usersRouter = Router();
 
@@ -22,6 +23,15 @@ usersRouter.post('/', async (req, res) => {
   if (![username, email, password].every(v => typeof v === 'string' && v.length > 0)) {
     return res.status(400).json({ error: 'username, email and password are required' });
   }
+
+  usersRouter.delete('/:id', async (req, res) => {
+    const deleted = await deleteUser(Number(req.params.id));
+    if (!deleted) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    res.status(204).end();
+  });
 
   // Hash before storing: salted, iterated SHA-256 (2-A.4, security lectures I and II).
   const salt = generateSalt();
