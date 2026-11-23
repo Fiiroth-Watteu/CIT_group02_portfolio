@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { healthRouter } from './routes/health.js';
 import { titleRouter } from './routes/titles.js';
+import { personRouter } from './routes/persons.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 
 // Builds the app without starting it, so supertest can use it directly (8-1).
@@ -16,7 +17,8 @@ app.use(express.json());
 // 3. routers, one per resource
 app.use('/api/health', healthRouter);
 app.use('/api/titles', titleRouter);
-// TODO: mount resource routers here once the resource model (2-B.1) is decided.
+app.use('/api/persons', personRouter);
+
 
 // 4. nothing matched -> 404
 app.use(notFoundHandler);
